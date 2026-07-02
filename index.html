@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="ku">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Module Allocation Mobile Panel</title>
+  <script src="https://cdn.jsdelivr.net/npm/@alpinejs/persist@3.x.x/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script>
+    // Translator for Stage names
+    function translateStage(stageStr) {
+      if(!stageStr) return '';
+      return stageStr.toString()
+        .replace(/Year 4/g, 'قۆناغی چوارەم')
+        .replace(/Year 3/g, 'قۆناغی سێیەم')
+        .replace(/Year 2/g, 'قۆناغی دووەم')
+        .replace(/Year 1/g, 'قۆناغی یەکەم');
+    }
+  </script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@300;400;600;700;900&display=swap');
+    .lang-ku { font-family: 'Noto Sans Arabic', sans-serif; direction: rtl; }
+    .lang-en { font-family: sans-serif; direction: ltr; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased pb-28" :class="currentLang === 'ku' ? 'lang-ku' : 'lang-en'" x-data="appSystem()">
+
+  <div class="fixed top-5 right-5 left-5 md:left-auto z-50 md:max-w-sm space-y-2">
+    <template x-for="toast in toasts" :key="toast.id">
+      <div :class="toast.type === 'success' ? 'bg-emerald-600' : toast.type === 'info' ? 'bg-blue-600' : 'bg-rose-600'" class="text-white px-4 py-3 rounded-xl shadow-2xl flex items-center justify-between transition transform duration-300">
+        <span class="text-sm font-medium" x-text="toast.message"></span>
+        <button @click="removeToast(toast.id)" class="ml-3 font-bold text-white hover:text-slate-200">&times;</button>
+      </div>
+    </template>
+  </div>
+
+  <div class="min-h-screen flex flex-col">
+    <header class="bg-blue-950 text-white shadow-md px-4 py-3 md:px-6 md:py-4 flex flex-col md:flex-row justify-between items-center gap-3 relative z-30">
+      <div class="flex items-center space-x-3 rtl:space-x-reverse w-full md:w-auto justify-center md:justify-start">
+        <div class="p-1.5 md:p-2 bg-blue-900 rounded-lg text-lg md:text-xl font-bold">🏫</div>
+        <div class="text-center md:text-left rtl:md:text-right">
+          <h1 class="text-base md:text-xl font-bold tracking-tight" x-text="t('title')"></h1>
+          <p class="text-[10px] md:text-xs text-blue-200" x-text="t('subtitle')"></p>
+        </div>
+      </div>
+      
+      <div class="flex items-center justify-between w-full md:w-auto gap-3">
+        <div class="bg-blue-900/60 p-1 rounded-lg flex border border-blue-700/40 shrink-0">
+          <button @click="setLanguage('en')" :class="currentLang === 'en' ? 'bg-blue-600 font-bold' : 'text-blue-200'" class="px-3 py-1 text-xs rounded transition text-white">EN</button>
+          <button @click="setLanguage('ku')" :class="currentLang === 'ku' ? 'bg-blue-600 font-bold' : 'text-blue-200'" class="px-3 py-1 text-xs rounded transition text-white">کوردی</button>
+        </div>
+
+        <div class="bg-blue-900/50 p-1.5 rounded-xl flex items-center border border-blue-700/30 w-full md:w-auto justify-center">
+          <button @click="currentView = 'teacher'; wizardStep = isTeacherVerified ? 1 : 0;" :class="currentView === 'teacher' ? 'bg-blue-600 shadow text-white' : 'text-blue-200 hover:text-white'" class="flex-1 md:flex-none px-4 py-1.5 rounded-lg text-xs md:text-sm font-semibold transition" x-text="t('btnTeacherUi')"></button>
+          <button @click="currentView = 'admin'" :class="currentView === 'admin' ? 'bg-blue-600 shadow text-white' : 'text-blue-200 hover:text-white'" class="flex-1 md:flex-none px-4 py-1.5 rounded-lg text-xs md:text-sm font-semibold transition ml-1 rtl:mr-1" x-text="t('btnAdminPanel')"></button>
+        </div>
+      </div>
+    </header>
+
+    <main class="flex-grow p-4 md:p-6 lg:p-8 max-w-7xl w-full mx-auto relative">
+      
+      <div x-show="currentView === 'teacher'" x-transition class="w-full">
+        
+        <div x-show="wizardStep === 0" class="max-w-md mx-auto space-y-6 mt-4 md:mt-10" x-transition>
+          <div class="bg-white p-6 md:p-8 rounded-3xl shadow-lg border border-slate-100 text-center space-y-6">
+            <div class="text-5xl mx-auto bg-blue-50 w-20 h-20 flex items-center justify-center rounded-full text-blue-500 shadow-inner">👨‍🏫</div>
+            <h2 class="text-xl font-black text-slate-800" x-text="t('loginTitle')"></h2>
+            
+            <div class="text-left rtl:text-right space-y-4">
+              <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2" x-text="t('teachingScopeLabel')"></label>
+                <select x-model="teachingScope" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-sm md:text-base outline-none focus:ring-2 focus:ring-blue-500 font-bold text-slate-700">
+                  <option value="" x-text="t('scopePlaceholder')"></option>
+                  <option value="both" x-text="t('scopeBoth')"></option>
+                  <option value="fall" x-text="t('scopeFall')"></option>
+                  <option value="spring" x-text="t('scopeSpring')"></option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2" x-text="t('enterCodeLabel')"></label>
+                <input type="password" x-model="teacherEnteredCode" :placeholder="t('codePlaceholder')" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-4 py-3 text-center tracking-widest text-lg outline-none focus:ring-2 focus:ring-blue-500">
+              </div>
+            </div>
+
+            <button @click="verifyTeacherIdentity()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-black text-lg py-4 rounded-xl shadow-lg transition active:scale-95" x-text="t('btnVerify')"></button>
+          </div>
+        </div>
+
+        <div x-show="wizardStep === 1" class="max-w-2xl mx-auto space-y-6 mt-2" x-transition>
+          
+          <div class="flex justify-between items-center mb-2">
+            <h2 class="text-lg font-bold text-slate-800"><span x-text="t('greeting')"></span> <span class="text-blue-600" x-text="selectedTeacherName"></span></h2>
+            <button @click="teacherSignOut()" class="text-xs bg-slate-200 text-slate-600 hover:bg-rose-100 hover:text-rose-600 px-3 py-1.5 rounded-lg font-bold transition">🚪 <span x-text="t('btnSignOut')"></span></button>
+          </div>
+
+          <div class="space-y-4">
+             
+             <div x-show="teachingScope === 'both' || teachingScope === 'fall'" class="bg-white rounded-3xl shadow-sm border border-orange-200 overflow-hidden relative transition-all">
+                <div class="absolute top-0 right-0 w-32 h-32 bg-orange-50 rounded-bl-full -z-10 opacity-50"></div>
+                
+                <div class="p-5 flex justify-between items-start border-b border-orange-50">
+                   <div>
+                      <div class="flex items-center gap-2">
+                         <span class="text-2xl bg-orange-100 w-10 h-10 flex items-center justify-center rounded-xl">🍂</span>
+                         <div>
+                            <h3 class="font-black text-slate-800 text-lg leading-tight" x-text="t('semesterFall')"></h3>
+                            <p class="text-xs text-slate-500 font-medium" x-text="t('reqPerSeason') + ': ' + teacherTargetHours + 'h'"></p>
+                         </div>
+                      </div>
+                   </div>
+                   <div :class="fallMetrics.balance < 0 ? 'bg-rose-50 text-rose-700 border-rose-200' : fallMetrics.balance === 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200'" class="border-2 px-3 py-1.5 rounded-xl font-black text-xs text-center shadow-sm min-w-[85px]">
+                      <span class="block text-lg leading-none mb-0.5" x-text="Math.abs(fallMetrics.balance) + 'h'"></span>
+                      <span class="block text-[9px] uppercase font-bold tracking-wider" x-text="fallMetrics.balance < 0 ? t('statusMinus') : fallMetrics.balance === 0 ? t('statusFull') : t('statusExceed')"></span>
+                   </div>
+                </div>
+
+                <div class="p-4 bg-orange-50/30 space-y-2 min-h-[80px]">
+                   <template x-for="item in [...db.assignments.filter(a => a.teacherName === selectedTeacherName && a.semester === 'Fall'), ...selectedCartModules.filter(c => c.semester === 'Fall')]" :key="item.moduleId || item.id">
+                      <div class="bg-white p-2.5 rounded-xl border border-orange-100 flex justify-between items-center shadow-sm">
+                         <div class="flex items-center gap-2">
+                            <span class="text-xs font-black text-orange-600 bg-orange-100 px-2 py-1 rounded-lg shrink-0" x-text="`${item.hours}h`"></span>
+                            <div>
+                               <span class="block font-bold text-slate-800 text-sm leading-tight" x-text="item.name"></span>
+                               <div class="flex gap-1 mt-1">
+                                  <span :class="item.shift === 'Morning' ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-indigo-700 bg-indigo-50 border-indigo-200'" class="text-[8px] px-1.5 py-0.5 rounded border font-bold flex items-center gap-0.5">
+                                     <span x-text="item.shift === 'Morning' ? '☀️' : '🌙'"></span>
+                                     <span x-text="item.shift === 'Morning' ? t('shiftMorning') : t('shiftEvening')"></span>
+                                  </span>
+                                  <span class="text-[8px] text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded font-bold" x-text="t('yrShort') + ' ' + item.year.replace('Year ', '')"></span>
+                               </div>
+                            </div>
+                         </div>
+                         <button x-show="!isDashboardLocked && selectedCartIds.includes(item.id)" @click="toggleCartItem(item)" class="w-8 h-8 text-rose-400 hover:bg-rose-50 rounded-xl flex items-center justify-center font-black transition">&times;</button>
+                         <span x-show="isDashboardLocked || db.assignments.some(a => a.moduleId === (item.moduleId || item.id) && a.teacherName === selectedTeacherName)" class="text-emerald-500 text-lg pr-2 rtl:pr-0 rtl:pl-2">🔒</span>
+                      </div>
+                   </template>
+                   
+                   <div x-show="[...db.assignments.filter(a => a.teacherName === selectedTeacherName && a.semester === 'Fall'), ...selectedCartModules.filter(c => c.semester === 'Fall')].length === 0" class="text-center py-3">
+                     <p class="text-xs text-orange-500/70 font-bold border-2 border-dashed border-orange-200 rounded-xl py-3" x-text="t('noItemsSelected')"></p>
+                   </div>
+                </div>
+
+                <div class="p-4 pt-0" x-show="!isDashboardLocked">
+                   <button @click="startSelection('Fall')" class="w-full bg-orange-50 hover:bg-orange-100 text-orange-700 border-2 border-orange-200 py-3 rounded-xl font-black flex items-center justify-center gap-2 transition active:scale-[0.98]">
+                      <span class="text-lg leading-none">➕</span> <span x-text="t('btnAddFall')"></span>
+                   </button>
+                </div>
+             </div>
+
+             <div x-show="teachingScope === 'both' || teachingScope === 'spring'" class="bg-white rounded-3xl shadow-sm border border-emerald-200 overflow-hidden relative transition-all">
+                <div class="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-full -z-10 opacity-50"></div>
+                
+                <div class="p-5 flex justify-between items-start border-b border-emerald-50">
+                   <div>
+                      <div class="flex items-center gap-2">
+                         <span class="text-2xl bg-emerald-100 w-10 h-10 flex items-center justify-center rounded-xl">🌸</span>
+                         <div>
+                            <h3 class="font-black text-slate-800 text-lg leading-tight" x-text="t('semesterSpring')"></h3>
+                            <p class="text-xs text-slate-500 font-medium" x-text="t('reqPerSeason') + ': ' + teacherTargetHours + 'h'"></p>
+                         </div>
+                      </div>
+                   </div>
+                   <div :class="springMetrics.balance < 0 ? 'bg-rose-50 text-rose-700 border-rose-200' : springMetrics.balance === 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200'" class="border-2 px-3 py-1.5 rounded-xl font-black text-xs text-center shadow-sm min-w-[85px]">
+                      <span class="block text-lg leading-none mb-0.5" x-text="Math.abs(springMetrics.balance) + 'h'"></span>
+                      <span class="block text-[9px] uppercase font-bold tracking-wider" x-text="springMetrics.balance < 0 ? t('statusMinus') : springMetrics.balance === 0 ? t('statusFull') : t('statusExceed')"></span>
+                   </div>
+                </div>
+
+                <div class="p-4 bg-emerald-50/30 space-y-2 min-h-[80px]">
+                   <template x-for="item in [...db.assignments.filter(a => a.teacherName === selectedTeacherName && a.semester === 'Spring'), ...selectedCartModules.filter(c => c.semester === 'Spring')]" :key="item.moduleId || item.id">
+                      <div class="bg-white p-2.5 rounded-xl border border-emerald-100 flex justify-between items-center shadow-sm">
+                         <div class="flex items-center gap-2">
+                            <span class="text-xs font-black text-emerald-600 bg-emerald-100 px-2 py-1 rounded-lg shrink-0" x-text="`${item.hours}h`"></span>
+                            <div>
+                               <span class="block font-bold text-slate-800 text-sm leading-tight" x-text="item.name"></span>
+                               <div class="flex gap-1 mt-1">
+                                  <span :class="item.shift === 'Morning' ? 'text-amber-700 bg-amber-50 border-amber-200' : 'text-indigo-700 bg-indigo-50 border-indigo-200'" class="text-[8px] px-1.5 py-0.5 rounded border font-bold flex items-center gap-0.5">
+                                     <span x-text="item.shift === 'Morning' ? '☀️' : '🌙'"></span>
+                                     <span x-text="item.shift === 'Morning' ? t('shiftMorning') : t('shiftEvening')"></span>
+                                  </span>
+                                  <span class="text-[8px] text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded font-bold" x-text="t('yrShort') + ' ' + item.year.replace('Year ', '')"></span>
+                               </div>
+                            </div>
+                         </div>
+                         <button x-show="!isDashboardLocked && selectedCartIds.includes(item.id)" @click="toggleCartItem(item)" class="w-8 h-8 text-rose-400 hover:bg-rose-50 rounded-xl flex items-center justify-center font-black transition">&times;</button>
+                         <span x-show="isDashboardLocked || db.assignments.some(a => a.moduleId === (item.moduleId || item.id) && a.teacherName === selectedTeacherName)" class="text-emerald-500 text-lg pr-2 rtl:pr-0 rtl:pl-2">🔒</span>
+                      </div>
+                   </template>
+
+                   <div x-show="[...db.assignments.filter(a => a.teacherName === selectedTeacherName && a.semester === 'Spring'), ...selectedCartModules.filter(c => c.semester === 'Spring')].length === 0" class="text-center py-3">
+                     <p class="text-xs text-emerald-500/70 font-bold border-2 border-dashed border-emerald-200 rounded-xl py-3" x-text="t('noItemsSelected')"></p>
+                   </div>
+                </div>
+
+                <div class="p-4 pt-0" x-show="!isDashboardLocked">
+                   <button @click="startSelection('Spring')" class="w-full bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-2 border-emerald-200 py-3 rounded-xl font-black flex items-center justify-center gap-2 transition active:scale-[0.98]">
+                      <span class="text-lg leading-none">➕</span> <span x-text="t('btnAddSpring')"></span>
+                   </button>
+                </div>
+             </div>
+          </div>
+
+          <div x-show="selectedCartIds.length > 0 && !isDashboardLocked" x-transition class="mt-6">
+            <button @click="wizardStep = 3" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-4 rounded-3xl flex items-center justify-between shadow-lg shadow-emerald-600/20 transition active:scale-[0.98] border-2 border-emerald-500">
+              <div class="flex items-center gap-4">
+                <div class="text-xl bg-white text-emerald-700 w-12 h-12 flex items-center justify-center rounded-2xl font-black shadow-inner" x-text="selectedCartIds.length"></div>
+                <div class="text-left rtl:text-right">
+                  <h4 class="font-black text-white text-lg" x-text="t('btnReviewSend')"></h4>
+                  <p class="text-emerald-100 text-[11px] font-medium" x-text="t('clickToFinalize')"></p>
+                </div>
+              </div>
+              <span class="text-white font-bold text-2xl rtl:rotate-180 bg-emerald-700/50 w-10 h-10 flex items-center justify-center rounded-full">❯</span>
+            </button>
+          </div>
+          
+          <div class="bg-slate-50 px-5 py-4 border border-slate-200 rounded-2xl text-center shadow-inner mt-4" x-show="!isDashboardLocked">
+            <p class="text-[11px] text-slate-500 leading-tight" x-text="t('balanceDesc')"></p>
+          </div>
+
+        </div>
+
+        <div x-show="wizardStep === 2" class="max-w-3xl mx-auto space-y-4" x-transition>
+          
+          <div class="flex items-center justify-between bg-white p-3 md:p-4 rounded-2xl shadow-sm border border-slate-200">
+            <button @click="wizardStep = 1" class="text-slate-500 hover:bg-slate-100 p-2 rounded-lg font-bold text-sm flex items-center gap-1 transition">
+              <span class="text-lg">🏠</span> <span x-text="t('btnHome')"></span>
+            </button>
+            <div class="font-bold text-slate-800 text-center px-2 flex-1">
+              <span x-text="form.semester === 'All' ? t('optAllSemesters') : form.semester === 'Fall' ? t('semesterFall') : t('semesterSpring')"></span>
+              <span class="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full ml-1 align-top" x-text="filteredModules.length"></span>
+            </div>
+            <button @click="wizardStep = 3" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-bold text-sm shadow-md transition flex items-center gap-2">
+              <span class="hidden sm:inline" x-text="t('btnReview')"></span> <span class="bg-white text-blue-600 text-[10px] w-5 h-5 rounded-full flex items-center justify-center" x-text="selectedCartIds.length"></span>
+            </button>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <select x-model="form.shift" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs md:text-sm font-bold text-slate-700 shadow-sm outline-none focus:border-blue-400">
+                <option value="All" x-text="t('optAllShifts')"></option>
+                <option value="Morning" x-text="t('shiftMorning')"></option>
+                <option value="Evening" x-text="t('shiftEvening')"></option>
+              </select>
+            </div>
+            <div>
+              <select x-model="form.year" class="w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-xs md:text-sm font-bold text-slate-700 shadow-sm outline-none focus:border-blue-400">
+                <option value="All" x-text="t('optAllYears')"></option>
+                <option value="Year 1" x-text="t('yr1')"></option>
+                <option value="Year 2" x-text="t('yr2')"></option>
+                <option value="Year 3" x-text="t('yr3')"></option>
+                <option value="Year 4" x-text="t('yr4')"></option>
+              </select>
+            </div>
+          </div>
+
+          <div class="space-y-3 pb-6">
+            <template x-for="mod in filteredModules" :key="mod.id">
+              <div :class="mod.isTakenByOther ? 'bg-slate-50 border-slate-200 opacity-60' : mod.isTakenByMe ? 'border-emerald-500 bg-emerald-50/40' : selectedCartIds.includes(mod.id) ? 'border-blue-500 bg-blue-50/50 shadow-md ring-2 ring-blue-500/20' : 'bg-white border-slate-200 shadow-sm'" class="border-2 p-4 rounded-2xl transition-all duration-200 relative overflow-hidden">
+                
+                <div class="absolute top-0 right-0 rtl:right-auto rtl:left-0 px-3 py-1 rounded-bl-xl rtl:rounded-bl-none rtl:rounded-br-xl text-[10px] font-black uppercase tracking-wider"
+                  :class="mod.isTakenByOther ? 'bg-slate-200 text-slate-500' : mod.isTakenByMe ? 'bg-emerald-500 text-white' : selectedCartIds.includes(mod.id) ? 'bg-blue-500 text-white' : mod.isSlotFull ? 'bg-rose-500 text-white' : 'hidden'">
+                  <span x-text="mod.isTakenByOther ? t('btnTaken') : mod.isTakenByMe ? t('statusAlreadyRegistered') : selectedCartIds.includes(mod.id) ? t('btnRegistered') : t('statusSlotFull')"></span>
+                </div>
+
+                <div class="pr-12 rtl:pr-0 rtl:pl-12">
+                  <h4 class="font-black text-slate-800 text-base md:text-lg leading-tight mb-1" x-text="mod.name"></h4>
+                  <div class="flex flex-wrap gap-1.5 items-center mt-2 mb-4">
+                    <span class="text-[10px] text-rose-700 font-black bg-rose-100 px-2 py-0.5 rounded border border-rose-200" x-text="`${mod.hours}h`"></span>
+                    <span class="text-[10px] text-slate-600 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 font-bold" x-text="t('yrShort') + ' ' + mod.year.replace('Year ', '')"></span>
+                    
+                    <span :class="mod.shift === 'Morning' ? 'text-amber-700 bg-amber-100 border-amber-300' : 'text-indigo-700 bg-indigo-100 border-indigo-300'" class="text-[10px] px-2 py-0.5 rounded border font-bold flex items-center gap-0.5">
+                      <span x-text="mod.shift === 'Morning' ? '☀️' : '🌙'"></span>
+                      <span x-text="mod.shift === 'Morning' ? t('shiftMorning') : t('shiftEvening')"></span>
+                    </span>
+                    
+                    <span :class="mod.semester === 'Fall' ? 'text-orange-700 bg-orange-100 border-orange-300' : 'text-emerald-700 bg-emerald-100 border-emerald-300'" class="text-[10px] px-2 py-0.5 rounded border font-bold flex items-center gap-0.5">
+                      <span x-text="mod.semester === 'Fall' ? '🍂' : '🌸'"></span>
+                      <span x-text="mod.semester === 'Fall' ? t('semesterFallShort') : t('semesterSpringShort')"></span>
+                    </span>
+                  </div>
+                </div>
+
+                <button 
+                  @click="toggleCartItem(mod); if(selectedCartIds.includes(mod.id)) setTimeout(() => wizardStep = 1, 150);" 
+                  :disabled="mod.isTakenByOther || mod.isTakenByMe || (mod.isSlotFull && !selectedCartIds.includes(mod.id))"
+                  :class="mod.isTakenByOther || mod.isTakenByMe ? 'bg-slate-100 text-slate-400 border border-slate-200' : (mod.isSlotFull && !selectedCartIds.includes(mod.id)) ? 'bg-rose-50 text-rose-300 border border-rose-200' : selectedCartIds.includes(mod.id) ? 'bg-rose-500 text-white shadow-md active:bg-rose-600' : 'bg-blue-600 text-white shadow-md active:bg-blue-700'"
+                  class="w-full py-3 rounded-xl text-sm font-black tracking-wide transition-all"
+                  x-text="mod.isTakenByOther ? t('btnTaken') : mod.isTakenByMe ? t('statusAlreadyRegistered') : (mod.isSlotFull && !selectedCartIds.includes(mod.id)) ? t('btnSlotFull') : selectedCartIds.includes(mod.id) ? t('btnRemove') : t('btnSelect')">
+                </button>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <div x-show="wizardStep === 3" class="max-w-md mx-auto space-y-4 pb-10" x-transition>
+          <div class="flex items-center justify-between bg-white p-2 md:p-3 rounded-2xl shadow-sm border border-slate-200">
+            <div class="flex items-center gap-1">
+              <button @click="wizardStep = 1" class="text-slate-500 hover:bg-slate-100 p-2 rounded-xl font-bold text-sm flex items-center transition" title="Home">
+                <span class="text-lg">🏠</span>
+              </button>
+              <button @click="wizardStep = 2" class="text-slate-500 hover:bg-slate-100 p-2 rounded-xl font-bold text-sm flex items-center gap-1 transition" title="Back">
+                <span class="rtl:rotate-180 inline-block">❮</span> <span class="hidden md:inline" x-text="t('btnBack')"></span>
+              </button>
+            </div>
+            <h3 class="font-black text-slate-800 text-center flex-1 pr-14 rtl:pr-0 rtl:pl-14 text-sm" x-text="t('modalHeadTitle')"></h3>
+          </div>
+
+          <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 space-y-4">
+            <div class="border-b border-slate-100 pb-3">
+              <span class="text-[10px] text-slate-400 uppercase font-bold" x-text="t('selectNameLabel')"></span>
+              <span class="font-black text-blue-900 block text-base" x-text="selectedTeacherName"></span>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-100">
+              <div class="text-center">
+                <span class="text-[10px] text-slate-400 font-bold block">🍂 Fall Bal</span>
+                <span :class="fallMetrics.balance < 0 ? 'text-rose-600' : fallMetrics.balance === 0 ? 'text-emerald-600' : 'text-blue-600'" class="font-black text-sm">
+                  <span x-text="Math.abs(fallMetrics.balance) + 'h '"></span>
+                  <span class="text-[9px]" x-text="fallMetrics.balance < 0 ? t('statusMinus') : fallMetrics.balance === 0 ? t('statusFull') : t('statusExceed')"></span>
+                </span>
+              </div>
+              <div class="text-center border-l rtl:border-l-0 rtl:border-r border-slate-200">
+                <span class="text-[10px] text-slate-400 font-bold block">🌸 Spring Bal</span>
+                <span :class="springMetrics.balance < 0 ? 'text-rose-600' : springMetrics.balance === 0 ? 'text-emerald-600' : 'text-blue-600'" class="font-black text-sm">
+                  <span x-text="Math.abs(springMetrics.balance) + 'h '"></span>
+                  <span class="text-[9px]" x-text="springMetrics.balance < 0 ? t('statusMinus') : springMetrics.balance === 0 ? t('statusFull') : t('statusExceed')"></span>
+                </span>
+              </div>
+            </div>
+
+            <div class="space-y-2 max-h-[260px] overflow-y-auto">
+              <template x-for="item in selectedCartModules" :key="item.id">
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-100 flex justify-between items-center">
+                  <div>
+                    <span class="block font-bold text-slate-800 text-sm" x-text="item.name"></span>
+                    <div class="flex flex-wrap gap-1 mt-1.5">
+                       <span :class="item.shift === 'Morning' ? 'text-amber-700 bg-amber-100 border-amber-300' : 'text-indigo-700 bg-indigo-100 border-indigo-300'" class="text-[9px] px-1.5 py-0.5 rounded border font-bold flex items-center gap-0.5">
+                          <span x-text="item.shift === 'Morning' ? '☀️' : '🌙'"></span>
+                          <span x-text="item.shift === 'Morning' ? t('shiftMorning') : t('shiftEvening')"></span>
+                       </span>
+                       <span :class="item.semester === 'Fall' ? 'text-orange-700 bg-orange-100 border-orange-300' : 'text-emerald-700 bg-emerald-100 border-emerald-300'" class="text-[9px] px-1.5 py-0.5 rounded border font-bold flex items-center gap-0.5">
+                          <span x-text="item.semester === 'Fall' ? '🍂' : '🌸'"></span>
+                          <span x-text="item.semester === 'Fall' ? t('semesterFallShort') : t('semesterSpringShort')"></span>
+                       </span>
+                       <span class="text-[9px] text-slate-600 bg-slate-200 border border-slate-300 px-1.5 py-0.5 rounded font-bold" x-text="t('yrShort') + ' ' + item.year.replace('Year ', '')"></span>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-xs font-black text-rose-600 bg-white border border-rose-100 px-2 py-1 rounded-lg shrink-0" x-text="`${item.hours}h`"></span>
+                    <button @click="toggleCartItem(item)" class="w-7 h-7 bg-white text-rose-400 hover:bg-rose-50 border border-slate-200 rounded-lg flex items-center justify-center font-black shrink-0">&times;</button>
+                  </div>
+                </div>
+              </template>
+            </div>
+
+            <button @click="submitPackageAssignments()" :disabled="subLock || selectedCartModules.length === 0" class="w-full bg-emerald-600 text-white font-black text-lg py-4 rounded-xl shadow-lg hover:bg-emerald-700 transition disabled:opacity-40 mt-2 flex items-center justify-center gap-2" x-text="subLock ? t('btnProcessing') : t('btnConfirmSubmit')"></button>
+          </div>
+        </div>
+
+        <div x-show="wizardStep === 2" class="fixed bottom-0 left-0 w-full bg-white border-t border-slate-200 p-3 pb-5 md:pb-3 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.1)] z-40 flex items-center justify-between" x-transition>
+          <div class="flex items-center gap-2">
+            <div class="bg-slate-100 p-2 rounded-xl text-center px-3 leading-none shrink-0">
+              <span class="block text-[9px] text-slate-400 font-bold uppercase" x-text="t('cartSelectedCount')"></span>
+              <span class="text-base font-black text-slate-800" x-text="selectedCartIds.length"></span>
+            </div>
+            <div class="text-[11px] leading-tight space-y-0.5">
+              <div>🍂 <span class="font-bold" :class="fallMetrics.balance < 0 ? 'text-rose-600' : fallMetrics.balance === 0 ? 'text-emerald-600' : 'text-blue-600'" x-text="Math.abs(fallMetrics.balance) + 'h ' + (fallMetrics.balance < 0 ? t('statusMinus') : fallMetrics.balance === 0 ? t('statusFull') : t('statusExceed'))"></span></div>
+              <div>🌸 <span class="font-bold" :class="springMetrics.balance < 0 ? 'text-rose-600' : springMetrics.balance === 0 ? 'text-emerald-600' : 'text-blue-600'" x-text="Math.abs(springMetrics.balance) + 'h ' + (springMetrics.balance < 0 ? t('statusMinus') : springMetrics.balance === 0 ? t('statusFull') : t('statusExceed'))"></span></div>
+            </div>
+          </div>
+          <button @click="wizardStep = 3" class="bg-emerald-600 text-white px-5 py-3 rounded-xl font-black text-sm shadow-md active:bg-emerald-700 transition" x-text="t('btnReview')"></button>
+        </div>
+
+      </div>
+
+      <div x-show="currentView === 'admin'" class="space-y-6" x-transition>
+        
+        <div x-show="!isAdminAuthenticated" class="max-w-md mx-auto bg-white p-8 rounded-3xl shadow-xl border border-slate-100 text-center mt-10">
+          <div class="text-5xl mb-4">🔐</div>
+          <h3 class="text-xl font-black text-slate-900 mb-2" x-text="t('adminTitle')"></h3>
+          <p class="text-xs text-slate-500 mb-6" x-text="t('adminPinPrompt')"></p>
+          <input type="password" x-model="adminPin" placeholder="•••••" class="w-full text-center text-2xl tracking-[0.5em] bg-slate-50 border border-slate-300 rounded-xl px-4 py-4 mb-4 outline-none focus:ring-2 focus:ring-blue-500 font-mono">
+          <button @click="authenticateAdmin()" class="w-full bg-slate-900 text-white font-black py-4 rounded-xl shadow-lg hover:bg-slate-800 transition" x-text="t('btnUnlockTerminal')"></button>
+        </div>
+
+        <div x-show="isAdminAuthenticated" class="space-y-4" x-transition>
+          
+          <div class="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200 shadow-sm gap-4 mb-4">
+             <span class="font-black text-slate-800 text-lg" x-text="t('adminTitle')"></span>
+             <button @click="adminSignOut()" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-600 px-4 py-2.5 rounded-xl font-bold transition flex items-center gap-2">🚪 <span x-text="t('btnSignOut')"></span></button>
+          </div>
+
+          <div class="bg-white p-5 rounded-2xl border border-slate-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shadow-sm items-end">
+            <div>
+              <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1" x-text="t('filterShift')"></label>
+              <select x-model="adminFilters.shift" class="w-full bg-slate-50 border border-slate-200 font-bold text-slate-700 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500 transition">
+                <option value="All" x-text="t('optAllShifts')"></option>
+                <option value="Morning" x-text="t('shiftMorning')"></option>
+                <option value="Evening" x-text="t('shiftEvening')"></option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1" x-text="t('filterSemester')"></label>
+              <select x-model="adminFilters.semester" class="w-full bg-slate-50 border border-slate-200 font-bold text-slate-700 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500 transition">
+                <option value="All" x-text="t('optAllSemesters')"></option>
+                <option value="Fall" x-text="t('semesterFall')"></option>
+                <option value="Spring" x-text="t('semesterSpring')"></option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1" x-text="t('filterYear')"></label>
+              <select x-model="adminFilters.year" class="w-full bg-slate-50 border border-slate-200 font-bold text-slate-700 rounded-xl p-3 outline-none focus:ring-2 focus:ring-blue-500 transition">
+                <option value="All" x-text="t('optAllYears')"></option>
+                <option value="Year 1" x-text="t('yr1')"></option>
+                <option value="Year 2" x-text="t('yr2')"></option>
+                <option value="Year 3" x-text="t('yr3')"></option>
+                <option value="Year 4" x-text="t('yr4')"></option>
+              </select>
+            </div>
+            <div>
+              <button @click="downloadAsPDF()" class="w-full bg-rose-600 hover:bg-rose-700 text-white font-black py-3 px-4 rounded-xl shadow-md transition flex items-center justify-center gap-2 active:scale-95">
+                <span class="text-lg">📄</span> <span x-text="t('btnPDF')"></span>
+              </button>
+            </div>
+          </div>
+
+          <div class="border-b-2 border-slate-200 flex flex-nowrap overflow-x-auto gap-4 md:space-x-8 rtl:space-x-reverse pt-2 px-1">
+            <button @click="adminSubTab = 'registered'" :class="adminSubTab === 'registered' ? 'border-b-[3px] border-blue-600 text-blue-700 font-black' : 'text-slate-500 font-bold border-b-[3px] border-transparent hover:text-slate-700'" class="pb-3 text-sm transition whitespace-nowrap px-2" x-text="t('tabRegistered')"></button>
+            <button @click="adminSubTab = 'unregistered'" :class="adminSubTab === 'unregistered' ? 'border-b-[3px] border-blue-600 text-blue-700 font-black' : 'text-slate-500 font-bold border-b-[3px] border-transparent hover:text-slate-700'" class="pb-3 text-sm transition whitespace-nowrap px-2" x-text="t('tabUnregistered')"></button>
+            <button @click="adminSubTab = 'vacant'" :class="adminSubTab === 'vacant' ? 'border-b-[3px] border-blue-600 text-blue-700 font-black' : 'text-slate-500 font-bold border-b-[3px] border-transparent hover:text-slate-700'" class="pb-3 text-sm transition whitespace-nowrap px-2" x-text="t('tabVacantModules')"></button>
+<button @click="adminSubTab = 'calculations'; fetchCalculations()" :class="adminSubTab === 'calculations' ? 'border-b-[3px] border-blue-600 text-blue-700 font-black' : 'text-slate-500 font-bold border-b-[3px] border-transparent hover:text-slate-700'" class="pb-3 text-sm transition whitespace-nowrap px-2">باری بەشەوانە</button>
+          </div>
+
+          <div x-show="adminSubTab === 'registered'" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden" x-transition>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left rtl:text-right border-collapse min-w-[800px]">
+                <thead>
+                  <tr class="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    <th class="px-5 py-4" x-text="t('thName')"></th>
+                    <th class="px-5 py-4" x-text="t('thTarget')"></th>
+                    <th class="px-5 py-4" x-text="t('thAccumulated')"></th>
+                    <th class="px-5 py-4" x-text="t('thSelections')"></th>
+                    <th class="px-5 py-4 text-center" x-text="t('thAction')"></th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-sm">
+                  <template x-for="teach in sortedRegisteredTeachers" :key="teach.name">
+                    <tr :class="teach.hasReachedTarget ? 'bg-emerald-50/40 hover:bg-emerald-50' : 'hover:bg-slate-50'" class="transition">
+                      <td class="px-5 py-4 font-bold text-slate-900">
+                        <span x-text="teach.name"></span>
+                        <template x-if="teach.hasReachedTarget">
+                          <span class="inline-block mx-2 text-[10px] bg-emerald-600 text-white px-2 py-0.5 rounded-md font-black shadow-sm" x-text="t('badgeTargetMet')"></span>
+                        </template>
+                      </td>
+                      <td class="px-5 py-4 font-mono font-bold text-slate-500" x-text="`${teach.targetHours}h`"></td>
+                      <td class="px-5 py-4 font-black" :class="teach.hasReachedTarget ? 'text-emerald-600' : 'text-blue-600'" x-text="`${teach.filteredTotalHours}h`"></td>
+                      <td class="px-5 py-4">
+                        <div class="flex flex-wrap gap-1.5 max-w-[400px]">
+                          <template x-for="m in teach.matchedModules" :key="m.moduleId">
+                            <span class="inline-flex items-center text-[10px] bg-white border border-slate-200 text-slate-700 px-2 py-1 rounded-lg shadow-sm">
+                              <span class="font-black text-rose-600 mr-1.5 rtl:ml-1.5" x-text="`[${m.shift === 'Morning' ? 'M' : 'E'}-${m.hours}h]`"></span>
+                              <span class="text-slate-500 font-bold mr-1.5 rtl:ml-1.5" x-text="m.year.replace('Year ', 'Yr')"></span>
+                              <span class="text-slate-900 font-bold truncate max-w-[150px]" x-text="m.name"></span>
+                              <button @click="deleteItem(m.moduleId)" class="ml-2 rtl:mr-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 w-5 h-5 rounded flex items-center justify-center font-black transition" title="Remove Module">×</button>
+                            </span>
+                          </template>
+                        </div>
+                      </td>
+                      <td class="px-5 py-4 text-center">
+                        <button @click="clearAllTeacherPackages(teach.name)" class="bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-bold py-1.5 px-3 rounded-xl text-[10px] uppercase tracking-wider transition flex items-center justify-center mx-auto gap-1.5">
+                          🗑️ <span x-text="t('btnClearSelections')"></span>
+                        </button>
+                      </td>
+                    </tr>
+                  </template>
+                  <template x-if="sortedRegisteredTeachers.length === 0">
+                    <tr><td colspan="5" class="text-center py-8 text-slate-400 font-bold text-sm" x-text="t('noMatchedRecords')"></td></tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div x-show="adminSubTab === 'unregistered'" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden" x-transition>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left rtl:text-right border-collapse min-w-[700px]">
+                <thead>
+                  <tr class="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    <th class="px-5 py-4" x-text="t('thName')"></th>
+                    <th class="px-5 py-4" x-text="t('thTarget')"></th>
+                    <th class="px-5 py-4" x-text="t('thEmail')"></th>
+                    <th class="px-5 py-4" x-text="t('thCode')"></th>
+                    <th class="px-5 py-4 text-center" x-text="t('thAction')"></th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-sm">
+                  <template x-for="teach in unregisteredTeachers" :key="teach.name">
+                    <tr class="hover:bg-slate-50 transition">
+                      <td class="px-5 py-4 font-bold text-slate-900" x-text="teach.name"></td>
+                      <td class="px-5 py-4 font-mono font-bold text-slate-500" x-text="`${teach.targetHours}h`"></td>
+                      <td class="px-5 py-4 font-medium text-blue-600" x-text="teach.email || '--'"></td>
+                      <td class="px-5 py-4 font-mono font-black tracking-widest text-rose-600" x-text="teach.code || '--'"></td>
+                      <td class="px-5 py-4 text-center">
+                        <button @click="sendTeacherCredentials(teach)" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-xl text-[10px] uppercase tracking-wider shadow-sm transition flex items-center justify-center gap-1.5 mx-auto">
+                          📨 <span x-text="t('btnSendCreds')"></span>
+                        </button>
+                      </td>
+                    </tr>
+                  </template>
+                  <template x-if="unregisteredTeachers.length === 0">
+                    <tr><td colspan="5" class="text-center py-8 text-slate-400 font-bold text-sm" x-text="t('noMatchedRecords')"></td></tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div x-show="adminSubTab === 'calculations'" class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 overflow-hidden" x-transition>
+    <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
+        <h2 class="text-xl font-bold text-slate-800 lang-ku">خشتەی باری بەشەوانەی مامۆستایان</h2>
+        
+        <div class="flex bg-slate-100 p-1 rounded-lg">
+            <button @click="calcTerm = 'fall'" :class="calcTerm === 'fall' ? 'bg-white shadow text-blue-600' : 'text-slate-600'" class="px-4 py-2 rounded-md text-sm font-bold transition-all">Fall</button>
+            <button @click="calcTerm = 'spring'" :class="calcTerm === 'spring' ? 'bg-white shadow text-blue-600' : 'text-slate-600'" class="px-4 py-2 rounded-md text-sm font-bold transition-all">Spring</button>
+        </div>
+
+        <div class="flex gap-2">
+            <button onclick="exportTeacherLoads('doc')" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold py-2 px-4 rounded shadow">
+                Word (Landscape)
+            </button>
+            <button onclick="exportTeacherLoads('xlsx')" class="bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-2 px-4 rounded shadow">
+                Excel (.xlsx)
+            </button>
+        </div>
+    </div>
+
+    <div x-show="isLoadingCalc" class="text-center py-10 text-slate-500">
+        <svg class="animate-spin h-8 w-8 mx-auto mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+        Loading calculations...
+    </div>
+
+    <div x-show="!isLoadingCalc" class="overflow-x-auto">
+        <table id="calculationTable" class="w-full border-collapse text-sm lang-ku" dir="rtl">
+            <thead class="bg-slate-200">
+                <tr>
+                    <th class="border border-slate-300 p-2 whitespace-nowrap">زنجیرە</th>
+                    <th class="border border-slate-300 p-2 whitespace-nowrap">ناوی سیانی</th>
+                    <th class="border border-slate-300 p-2 whitespace-nowrap">نازناوی زانستی</th>
+                    <th class="border border-slate-300 p-2 whitespace-nowrap">بەشەوانە (نصاب)</th>
+                    <th class="border border-slate-300 p-2 whitespace-nowrap">کاتژمێر</th>
+                    <th class="border border-slate-300 p-2 whitespace-nowrap">هۆکاری دابەزین</th>
+                    <th class="border border-slate-300 p-2" x-text="calcTerm === 'fall' ? 'ناوی بابەتەکانی وەرزی یەکەم' : 'ناوی بابەتەکانی وەرزی دووەم'"></th>
+                    <th class="border border-slate-300 p-2">قۆناغ</th>
+                    <th class="border border-slate-300 p-2">کۆی کاتژمێر بۆ هەر بابەتێک</th>
+                    <th class="border border-slate-300 p-2 whitespace-nowrap">توێژینەوەی قۆناغی چوارەم</th>
+                    <th class="border border-slate-300 p-2 whitespace-nowrap">کۆی کاتژمێرەکانی وانەوتنەوە</th>
+                    <th class="border border-slate-300 p-2 whitespace-nowrap">باری بەشەوانە</th>
+                    <th class="border border-slate-300 p-2">تێبینی</th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="(row, index) in (calcTerm === 'fall' ? calculationsData.fall : calculationsData.spring)">
+                    <tr class="hover:bg-slate-50">
+                        <td class="border border-slate-300 p-2 text-center font-bold" x-text="index + 1"></td>
+                        <td class="border border-slate-300 p-2 whitespace-nowrap" x-text="row[0]"></td> 
+                        <td class="border border-slate-300 p-2" x-text="row[1]"></td> 
+                        <td class="border border-slate-300 p-2 text-center" x-text="row[4]"></td> 
+                        <td class="border border-slate-300 p-2 text-center" x-text="row[3]"></td> 
+                        <td class="border border-slate-300 p-2" x-text="row[2]"></td> 
+                        <td class="border border-slate-300 p-2 whitespace-pre-wrap" x-text="row[5]"></td> 
+                        <td class="border border-slate-300 p-2 whitespace-pre-wrap" x-text="translateStage(row[7])"></td> 
+                        <td class="border border-slate-300 p-2 whitespace-pre-wrap text-center" x-text="row[6]"></td> 
+                        <td class="border border-slate-300 p-2 text-center" x-text="row[8]"></td> 
+                        <td class="border border-slate-300 p-2 text-center font-bold" x-text="row[9]"></td> 
+                        <td class="border border-slate-300 p-2 text-center font-bold text-lg" dir="ltr" x-text="row[10]" :class="row[10] && row[10].toString().startsWith('-') ? 'text-red-600' : 'text-green-600'"></td> 
+                        <td class="border border-slate-300 p-2" x-text="row[11] || ''"></td> 
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div x-show="adminSubTab === 'vacant'" class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden" x-transition>
+            <div class="overflow-x-auto">
+              <table class="w-full text-left rtl:text-right border-collapse min-w-[700px]">
+                <thead>
+                  <tr class="bg-slate-50 border-b border-slate-200 text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    <th class="px-5 py-4" x-text="t('thModuleName')"></th>
+                    <th class="px-5 py-4" x-text="t('thShift')"></th>
+                    <th class="px-5 py-4" x-text="t('thSemester')"></th>
+                    <th class="px-5 py-4" x-text="t('thYear')"></th>
+                    <th class="px-5 py-4" x-text="t('thHours')"></th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100 text-sm">
+                  <template x-for="mod in vacantModules" :key="mod.id">
+                    <tr class="hover:bg-slate-50 transition">
+                      <td class="px-5 py-4 font-bold text-slate-900" x-text="mod.name"></td>
+                      <td class="px-5 py-4">
+                         <span :class="mod.shift === 'Morning' ? 'text-amber-700 bg-amber-100' : 'text-indigo-700 bg-indigo-100'" class="text-[10px] px-2 py-1 rounded-md font-bold" x-text="mod.shift === 'Morning' ? t('shiftMorning') : t('shiftEvening')"></span>
+                      </td>
+                      <td class="px-5 py-4">
+                         <span :class="mod.semester === 'Fall' ? 'text-orange-700 bg-orange-100' : 'text-emerald-700 bg-emerald-100'" class="text-[10px] px-2 py-1 rounded-md font-bold" x-text="mod.semester === 'Fall' ? t('semesterFall') : t('semesterSpring')"></span>
+                      </td>
+                      <td class="px-5 py-4">
+                         <span class="text-[10px] text-slate-600 bg-slate-200 px-2 py-1 rounded-md font-bold" x-text="t('yrShort') + ' ' + mod.year.replace('Year ', '')"></span>
+                      </td>
+                      <td class="px-5 py-4 font-mono font-black text-rose-600" x-text="`${mod.hours}h`"></td>
+                    </tr>
+                  </template>
+                  <template x-if="vacantModules.length === 0">
+                    <tr><td colspan="5" class="text-center py-8 text-slate-400 font-bold text-sm" x-text="t('noMatchedRecords')"></td></tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const GAS_URL = 'YOUR_DEPLOYED_GAS_WEB_APP_URL';
+    async function gasCall(action, ...params) {
+      const res = await fetch(GAS_URL, { method: 'POST', body: JSON.stringify({ action, params }) });
+      return res.json();
+    }
+
+    function appSystem() {
+      return {
+        currentLang: 'ku', currentView: 'teacher', wizardStep: 0, 
+        isAdminAuthenticated: false, adminPin: '', adminSubTab: 'registered',
+        selectedTeacherName: '', teacherEnteredCode: '', isTeacherVerified: false,
+        teachingScope: '', hasSubmitted: false,
+        teacherTargetHours: 0, selectedTeacherEmail: '', selectedCartIds: [], subLock: false, toasts: [],
+        
+        form: { shift: 'All', semester: 'All', year: 'All' },
+        adminFilters: { shift: 'All', semester: 'All', year: 'All' },
+        
+        db: { modules: [], assignments: [], teachers: [] },
+        calculationsData: { fall: [], spring: [] },
+        calcTerm: 'fall',
+        isLoadingCalc: false,
+
+        localization: {
+          en: {
+            title: "English Dept Module System", subtitle: "Mobile Allocation Terminal",
+            btnTeacherUi: "Teacher App", btnAdminPanel: "Admin Panel", btnSignOut: "Exit", btnBack: "Back", btnHome: "Home",
+            loginTitle: "Lecturer Login", selectNameLabel: "Select Your Name", chooseNamePlaceholder: "-- Choose --",
+            teachingScopeLabel: "Teaching Term Scope", scopePlaceholder: "-- Select Scope --",
+            scopeBoth: "Both Semesters (Fall & Spring)", scopeFall: "Fall Semester Only", scopeSpring: "Spring Semester Only",
+            enterCodeLabel: "Verification PIN", codePlaceholder: "Enter 4-digit PIN", btnVerify: "Login to Terminal",
+            greeting: "Welcome,", workloadDashboard: "Seasonal Workload Dashboard", registeredHoursLabel: "Selected Workload",
+            statusMinus: "Deficit", statusFull: "Fulfilled", statusExceed: "Overload", reqPerSeason: "Required per Term",
+            balanceDesc: "Color code meanings: Red = Hours deficit for this term. Green = Met exactly. Blue = Overload workload.",
+            semesterFall: "Fall Semester", semesterFallShort: "Fall", btnAddFall: "Select Fall Modules",
+            semesterSpring: "Spring Semester", semesterSpringShort: "Spring", btnAddSpring: "Select Spring Modules",
+            optAllSemesters: "Both Semesters", shiftMorning: "Morning", shiftEvening: "Evening", 
+            yr1: "Stage 1", yr2: "Stage 2", yr3: "Stage 3", yr4: "Stage 4", yrShort: "Stg", cartSelectedCount: "Cart Items",
+            btnReview: "Review Selection", btnReviewSend: "Review Cart & Submit", clickToFinalize: "Click here to finalize selection",
+            noItemsSelected: "No modules selected for this term yet.",
+            modalHeadTitle: "Submit Registration Package", btnConfirmSubmit: "Confirm & Submit",
+            btnProcessing: "Saving Selections...", statusAlreadyRegistered: "Owned", statusSlotFull: "Slot Full", btnSelect: "Add",
+            btnRemove: "Drop", btnTaken: "Taken", adminTitle: "Administrative Terminal Access", btnUnlockTerminal: "Unlock Console",
+            optAllShifts: "All Shifts", optAllYears: "All Stages", optAllTeachers: "All Faculty", thName: "Name", thTarget: "Req",
+            thSelections: "Assigned Modules", thAction: "Actions", btnClearSelections: "Wipe All", btnSlotFull: "Locked",
+            confirmedAllocationsTitle: "Confirmed Selections", errorMissedSeason: "Validation Conflict: You chose Both Semesters but missed selecting items for one season. Please select modules from both seasons to submit.",
+            errorSelectScope: "Please pick your Teaching Term Scope before logging in.",
+            // Desktop Admin Missing Keys Included:
+            filterShift: "1. Shift Stream", filterSemester: "2. Term Semester", filterYear: "3. Academic Stage",
+            tabRegistered: "Registered Teachers", tabUnregistered: "Unregistered Open Teachers", tabVacantModules: "Vacant Modules",
+            thAccumulated: "Accumulated Weight", thEmail: "Registry Email", thCode: "Verification Code", thModuleName: "Module Name",
+            thShift: "Shift", thSemester: "Semester", thYear: "Year", thHours: "Hours",
+            badgeTargetMet: "Workload Filled", noMatchedRecords: "No matching faculty profiles found.",
+            btnSendCreds: "Send Credentials", btnPDF: "Download PDF Report", statusUnavailable: "🔒 Claimed", adminPinPrompt: "Enter validation identity PIN saved within system preferences."
+          },
+          ku: {
+            title: "سیستەمی مۆدیۆلەکان", subtitle: "وەشانی مۆبایل - بەشی ئینگلیزی",
+            btnTeacherUi: "مامۆستا", btnAdminPanel: "ئەدمین", btnSignOut: "دەرچوون", btnBack: "گەڕانەوە", btnHome: "ماڵەوە",
+            loginTitle: "چوونەژوورەوەی مامۆستا", selectNameLabel: "ناوی خۆت هەڵبژێرە", chooseNamePlaceholder: "-- هەڵبژێرە --",
+            teachingScopeLabel: "ماوەی وانەوتنەوەی دیاریکراو", scopePlaceholder: "-- وەرزی خوێندن دیاریبکە --",
+            scopeBoth: "هەردوو وەرزەکە (پاییز و بەهار)", scopeFall: "تەنها وەرزی پاییز", scopeSpring: "تەنها وەرزی بەهار",
+            enterCodeLabel: "کۆدی تایبەت", codePlaceholder: "کۆدەکه بنووسە", btnVerify: "چوونەژوورەوە",
+            greeting: "سڵاو،", workloadDashboard: "داشبۆردی کاتژمێری وەرزەکان", registeredHoursLabel: "کاتژمێری دیاریکراو",
+            statusMinus: "کەمتر", statusFull: "تەواو", statusExceed: "زیادە", reqPerSeason: "کاتژمێری داواکراو بۆ هەر وەرزێک",
+            balanceDesc: "واتای ڕەنگەکان: سوور = کاتژمێرت کەمترە لە پێویست بۆ ئەم وەرزە. سەوز = تەواوە. شین = لە پێویست زیاترت هەڵبژاردووە.",
+            semesterFall: "وەرزی پاییز", semesterFallShort: "پاییز", btnAddFall: "هەڵبژاردنی بابەتەکانی پاییز",
+            semesterSpring: "وەرزی بەهار", semesterSpringShort: "بەهار", btnAddSpring: "هەڵبژاردنی بابەتەکانی بەهار",
+            optAllSemesters: "هەردوو وەرزەکە", shiftMorning: "بەیانیان", shiftEvening: "ئێواران", 
+            yr1: "قۆناغی ١", yr2: "قۆناغی ٢", yr3: "قۆناغی ٣", yr4: "قۆناغی ٤", yrShort: "قۆ", cartSelectedCount: "سەبەتە",
+            btnReview: "پێداچوونەوە", btnReviewSend: "پێداچوونەوەی سەبەتە و ناردن", clickToFinalize: "لێرە کلیک بکە بۆ ناردنی کۆتایی",
+            noItemsSelected: "هیچ بابەتێک بۆ ئەم وەرزە دیاری نەکراوە.",
+            modalHeadTitle: "تۆمارکردنی کۆتایی مۆدیۆلەکان", btnConfirmSubmit: "پشتڕاستکردنەوە و ناردن",
+            btnProcessing: "خەریکە تۆمار دەکرێت...", statusAlreadyRegistered: "تۆمارکراوە", statusSlotFull: "کات پڕبووە", btnSelect: "زیادکردن",
+            btnRemove: "لادان", btnTaken: "دیاریکراوە", adminTitle: "چوونەژوورەوەی ئەدمین", btnUnlockTerminal: "کردنەوەی پانێل",
+            optAllShifts: "گشت کاتەکان", optAllYears: "گشت قۆناغەکان", optAllTeachers: "گشت مامۆستاکان", thName: "ناو", thTarget: "داواکراو",
+            thSelections: "بابەتە هەڵبژێردراوەکان", thAction: "کردار", btnClearSelections: "سڕینەوەی گشتی", btnSlotFull: "پڕبووە",
+            confirmedAllocationsTitle: "بابەتە جێگیرکراوەکان", errorMissedSeason: "هەڵەی تۆمارکردن: تۆ هەردوو وەرزی خوێندنت هەڵبژاردووە بەڵام بابەتت بۆ یەکێک لە وەرزەکان دیاری نەکردووە. تکایە بابەت بۆ هەردوو وەرزەکە هەڵبژێرە.",
+            errorSelectScope: "تکایە ماوەی وانەوتنەوەکەت دیاریبکە پێش چوونەژوورەوە.",
+            // Desktop Admin Missing Keys Included:
+            filterShift: "١. کاتی خوێندن", filterSemester: "٢. وەرزی خوێندن", filterYear: "٣. قۆناغی خوێندن",
+            tabRegistered: "مامۆستا تۆمارکراوەکان", tabUnregistered: "مامۆستا تۆمارنەکراوەکان", tabVacantModules: "مۆدیۆلە دابەشنەکراوەکان",
+            thAccumulated: "ڕێژەی تۆمارکراو", thEmail: "ئیمەیڵ", thCode: "کۆدی تێپەڕبوون", thModuleName: "ناوی مۆدیۆل",
+            thShift: "کاتی خوێندن", thSemester: "وەرزی خوێندن", thYear: "قۆناغ", thHours: "کاتژمێر",
+            badgeTargetMet: "تەواو بووە", noMatchedRecords: "هیچ داتایەک نەدۆزرایەوە.",
+            btnSendCreds: "ناردنی کۆد", btnPDF: "داگرتنی ڕاپۆرتی PDF", statusUnavailable: "🔒 پێشتر دیاریکراوە", adminPinPrompt: "تکایە پین کۆدی ئەدمین بنووسە."
+          }
+        },
+
+        init() { this.refreshData(); setInterval(() => this.refreshData(), 15000); },
+        t(key) { return this.localization[this.currentLang][key] || key; },
+        setLanguage(l) { this.currentLang = l; },
+        addToast(m, type = 'success') { const id = Date.now(); this.toasts.push({ id, message: m, type }); setTimeout(() => this.removeToast(id), 4000); },
+        removeToast(id) { this.toasts = this.toasts.filter(t => t.id !== id); },
+        refreshData() { gasCall('getAppData').then(res => { this.db = res; }); },
+        fetchCalculations() {
+            this.isLoadingCalc = true;
+            gasCall('getCalculations').then(res => {
+                this.calculationsData = res;
+                this.isLoadingCalc = false;
+            });
+        },
+        resetVerification() { 
+          this.isTeacherVerified = false; 
+          this.teacherEnteredCode = ''; 
+          this.teachingScope = ''; 
+          this.hasSubmitted = false; 
+          this.selectedCartIds = []; 
+          this.wizardStep = 0; 
+          this.selectedTeacherName = ''; 
+        },
+
+        verifyTeacherIdentity() {
+          if (!this.teachingScope) { this.addToast(this.t('errorSelectScope'), "error"); return; }
+          if (!this.teacherEnteredCode.trim()) { this.addToast(this.currentLang === 'ku' ? "تکایە کۆدەکە بنووسە" : "Please enter your PIN.", "error"); return; }
+          
+          const prof = this.db.teachers.find(t => t.code === this.teacherEnteredCode.trim());
+          
+          if (prof) {
+            this.selectedTeacherName = prof.name; 
+            this.isTeacherVerified = true; 
+            this.teacherTargetHours = prof.targetHours; 
+            this.selectedTeacherEmail = prof.email; 
+            this.wizardStep = 1;
+            this.addToast(this.currentLang === 'ku' ? "چوونەژوورەوە سەرکەوتوو بوو ✓" : "Login Successful ✓", "success");
+          } else { 
+            this.addToast(this.currentLang === 'ku' ? "کۆدەکە هەڵەیە!" : "Incorrect PIN!", "error"); 
+          }
+        },
+        teacherSignOut() { this.resetVerification(); this.addToast("Signed out.", "info"); },
+        startSelection(semester) { this.form.semester = semester; this.wizardStep = 2; },
+
+        get fallMetrics() {
+          const reg = this.db.assignments.filter(a => a.teacherName === this.selectedTeacherName && a.semester === 'Fall').reduce((sum, a) => sum + a.hours, 0);
+          const cart = this.selectedCartModules.filter(m => m.semester === 'Fall').reduce((sum, m) => sum + m.hours, 0);
+          return { total: reg + cart, balance: (reg + cart) - this.teacherTargetHours };
+        },
+        get springMetrics() {
+          const reg = this.db.assignments.filter(a => a.teacherName === this.selectedTeacherName && a.semester === 'Spring').reduce((sum, a) => sum + a.hours, 0);
+          const cart = this.selectedCartModules.filter(m => m.semester === 'Spring').reduce((sum, m) => sum + m.hours, 0);
+          return { total: reg + cart, balance: (reg + cart) - this.teacherTargetHours };
+        },
+
+        get isDashboardLocked() {
+          return this.hasSubmitted || this.db.assignments.some(a => a.teacherName === this.selectedTeacherName);
+        },
+
+        get filteredModules() {
+          return this.db.modules
+            .filter(m => {
+              return (this.form.shift === 'All' || m.shift === this.form.shift) &&
+                     (this.form.semester === 'All' || m.semester === this.form.semester) &&
+                     (this.form.year === 'All' || m.year === this.form.year);
+            })
+            .map(m => {
+              const assigned = this.db.assignments.find(a => a.moduleId === m.id);
+              const isTakenByMe = assigned && assigned.teacherName === this.selectedTeacherName;
+              const inCartInSlot = this.selectedCartModules.some(c => c.year === m.year && c.semester === m.semester && c.shift === m.shift && c.id !== m.id);
+              const registeredInSlot = this.db.assignments.some(a => a.teacherName === this.selectedTeacherName && a.year === m.year && a.semester === m.semester && a.shift === m.shift && a.moduleId !== m.id);
+              return {
+                ...m,
+                isTakenByOther: assigned && assigned.teacherName !== this.selectedTeacherName,
+                isTakenByMe: isTakenByMe,
+                isSlotFull: !isTakenByMe && (inCartInSlot || registeredInSlot)
+              };
+            });
+        },
+
+        toggleCartItem(m) {
+          if (this.selectedCartIds.includes(m.id)) { this.selectedCartIds = this.selectedCartIds.filter(id => id !== m.id); }
+          else { this.selectedCartIds = [...this.selectedCartIds, m.id]; }
+        },
+        get selectedCartModules() { return this.db.modules.filter(m => this.selectedCartIds.includes(m.id)); },
+
+        submitPackageAssignments() {
+          if (this.teachingScope === 'both') {
+            const chosenFall = this.selectedCartModules.some(m => m.semester === 'Fall');
+            const chosenSpring = this.selectedCartModules.some(m => m.semester === 'Spring');
+            if (!chosenFall || !chosenSpring) {
+              this.addToast(this.t('errorMissedSeason'), "error");
+              return;
+            }
+          }
+
+          this.subLock = true;
+          gasCall('submitBulkSelections', this.selectedTeacherName, this.selectedTeacherEmail, this.selectedCartModules).then((res) => {
+              this.subLock = false;
+              if (res.success) {
+                this.addToast("Package Submitted Successfully! Confirmation email sent.", "success");
+                this.selectedCartIds = []; 
+                this.hasSubmitted = true;
+                this.refreshData(); 
+                this.wizardStep = 1;
+              } else { this.addToast(res.message, "error"); this.refreshData(); }
+            });
+        },
+
+        // --- NEW ADMIN PANEL LOGIC (Ported from Desktop) ---
+        authenticateAdmin() {
+          gasCall('verifyAdminPin', this.adminPin).then((isValid) => { 
+            if (isValid) { this.isAdminAuthenticated = true; this.addToast("Admin console unlocked."); } 
+            else { this.addToast("Incorrect PIN.", "error"); }
+          });
+        },
+        adminSignOut() { this.isAdminAuthenticated = false; this.adminPin = ''; this.addToast(this.t('btnSignOut') + " ✓", "info"); },
+
+        get adminTeacherMetrics() {
+          return this.db.teachers.map(t => {
+            const allTeacherAssigns = this.db.assignments.filter(a => a.teacherName === t.name);
+            const filteredAssigns = allTeacherAssigns.filter(a => {
+              const matchShift = this.adminFilters.shift === 'All' || a.shift === this.adminFilters.shift;
+              const matchSem = this.adminFilters.semester === 'All' || a.semester === this.adminFilters.semester;
+              const matchYr = this.adminFilters.year === 'All' || a.year === this.adminFilters.year;
+              return matchShift && matchSem && matchYr;
+            });
+            const filteredTotalHours = filteredAssigns.reduce((sum, a) => sum + a.hours, 0);
+            const globalTotalHours = allTeacherAssigns.reduce((sum, a) => sum + a.hours, 0);
+            return {
+              name: t.name, email: t.email, code: t.code, targetHours: t.targetHours,
+              filteredTotalHours: filteredTotalHours, globalTotalHours: globalTotalHours,
+              matchedModules: filteredAssigns, hasSelections: allTeacherAssigns.length > 0,
+              hasReachedTarget: globalTotalHours >= t.targetHours
+            };
+          });
+        },
+
+        get sortedRegisteredTeachers() {
+          return this.adminTeacherMetrics.filter(t => t.hasSelections).sort((a, b) => {
+            if (a.hasReachedTarget && !b.hasReachedTarget) return -1;
+            if (!a.hasReachedTarget && b.hasReachedTarget) return 1;
+            return b.filteredTotalHours - a.filteredTotalHours;
+          });
+        },
+        get unregisteredTeachers() { return this.adminTeacherMetrics.filter(t => !t.hasSelections); },
+        get vacantModules() {
+          return this.db.modules.filter(m => {
+            if (this.db.assignments.some(a => a.moduleId === m.id)) return false;
+            return (this.adminFilters.shift === 'All' || m.shift === this.adminFilters.shift) &&
+                   (this.adminFilters.semester === 'All' || m.semester === this.adminFilters.semester) &&
+                   (this.adminFilters.year === 'All' || m.year === this.adminFilters.year);
+          });
+        },
+
+        clearAllTeacherPackages(teacherName) { 
+          const confirmTxt = this.currentLang === 'ku' ? `ئایا دڵنیایت لە سڕینەوەی تەواوی تۆمارەکانی مامۆستا ${teacherName}؟` : `Are you absolutely sure you want to completely wipe all registered selections for ${teacherName}?`;
+          if (!confirm(confirmTxt)) return;
+          gasCall('clearTeacherAssignments', teacherName).then((res) => {
+            if(res.success) { this.addToast(this.currentLang === 'ku' ? "تۆمارەکان بە سەرکەوتوویی سڕدرانەوە" : "Registrations completely cleared.", "success"); this.refreshData(); }
+            else { this.addToast(res.message, "error"); }
+          }); 
+        },
+
+        deleteItem(moduleId) { 
+          const confirmTxt = this.currentLang === 'ku' ? "ئایا دڵنیایت لە لادانی ئەم مۆدیۆلە؟" : "Are you sure you want to disassociate and remove this module allocation?";
+          if (!confirm(confirmTxt)) return;
+          gasCall('deleteSingleAssignment', moduleId).then((res) => {
+            if(res.success) { this.addToast(this.currentLang === 'ku' ? "مۆدیۆلەکە لادرا" : "Module allocation deleted.", "success"); this.refreshData(); }
+            else { this.addToast(res.message, "error"); }
+          }); 
+        },
+
+        sendTeacherCredentials(teacherObj) {
+          if (!teacherObj.email) {
+            this.addToast(this.currentLang === 'ku' ? "ئەم مامۆستایە ئیمەیڵی بۆ تۆمار نەکراوە!" : "No email address found for this teacher.", "error");
+            return;
+          }
+          this.addToast(this.currentLang === 'ku' ? "کۆدەکە دەنێردرێت..." : "Sending credentials email...", "info");
+          gasCall('sendTeacherCredentialsEmail', teacherObj.name, teacherObj.email, teacherObj.code).then((res) => {
+            if (res.success) this.addToast(this.currentLang === 'ku' ? `بە سەرکەوتوویی ناردرا بۆ ${teacherObj.name}` : `Credentials sent to ${teacherObj.name}!`, "success");
+            else this.addToast(res.message, "error");
+          });
+        },
+
+        downloadAsPDF() {
+          const isKurdish = this.currentLang === 'ku';
+          const titleText = isKurdish ? "زانکۆی ڕاپەڕین - ڕاپۆرتی دابەشکردنی مۆدیۆلەکان" : "University of Raparin - Module Allocation Report";
+          const subTitleText = `${this.t('filterShift')}: ${this.adminFilters.shift} | ${this.t('filterSemester')}: ${this.adminFilters.semester} | ${this.t('filterYear')}: ${this.adminFilters.year}`;
+          let tableHtml = '';
+
+          if (this.adminSubTab === 'registered') {
+            tableHtml = `<h2>${this.t('tabRegistered')}</h2><table><thead><tr><th>${this.t('thName')}</th><th>${this.t('thTarget')}</th><th>${this.t('thAccumulated')}</th><th>${this.t('thSelections')}</th></tr></thead><tbody>${this.sortedRegisteredTeachers.map(t => `<tr class="${t.hasReachedTarget ? 'completed' : ''}"><td><b>${t.name}</b> ${t.hasReachedTarget ? `(${this.t('badgeTargetMet')})` : ''}</td><td>${t.targetHours}h</td><td><b>${t.filteredTotalHours}h</b></td><td>${t.matchedModules.map(m => `[${m.shift[0]}-${m.hours}h] ${m.year} - ${m.name}`).join('<br> ')}</td></tr>`).join('')}</tbody></table>`;
+          } else if (this.adminSubTab === 'unregistered') {
+            tableHtml = `<h2>${this.t('tabUnregistered')}</h2><table><thead><tr><th>${this.t('thName')}</th><th>${this.t('thTarget')}</th><th>${this.t('thEmail')}</th><th>${this.t('thCode')}</th></tr></thead><tbody>${this.unregisteredTeachers.map(t => `<tr><td><b>${t.name}</b></td><td>${t.targetHours}h</td><td>${t.email || '--'}</td><td>${t.code || '--'}</td></tr>`).join('')}</tbody></table>`;
+          } else {
+            tableHtml = `<h2>${this.t('tabVacantModules')}</h2><table><thead><tr><th>${this.t('thModuleName')}</th><th>${this.t('thShift')}</th><th>${this.t('thSemester')}</th><th>${this.t('thYear')}</th><th>${this.t('thHours')}</th></tr></thead><tbody>${this.vacantModules.map(m => `<tr><td><b>${m.name}</b></td><td>${m.shift === 'Morning' ? this.t('shiftMorning') : this.t('shiftEvening')}</td><td>${m.semester === 'Fall' ? this.t('semesterFall') : this.t('semesterSpring')}</td><td>${this.t('yrShort')} ${m.year.replace('Year ', '')}</td><td><b>${m.hours}h</b></td></tr>`).join('')}</tbody></table>`;
+          }
+
+          const printWindow = window.open('', '_blank');
+          printWindow.document.write(`<html><head><title>Print Report</title><style>@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;700&display=swap');body { font-family: 'Noto Sans Arabic', sans-serif; direction: ${isKurdish ? 'rtl' : 'ltr'}; padding: 40px; color: #1e293b; background-color: #ffffff; } h1 { color: #1e3a8a; font-size: 24px; margin-bottom: 5px; text-align: center; } p.meta { text-align: center; font-size: 13px; color: #64748b; margin-top: 0; margin-bottom: 30px; } h2 { color: #0f172a; border-bottom: 2px solid #cbd5e1; padding-bottom: 8px; font-size: 18px; margin-top: 20px; } table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 12px; } th, td { border: 1px solid #e2e8f0; padding: 10px; text-align: ${isKurdish ? 'right' : 'left'}; } th { background-color: #f8fafc; color: #475569; font-weight: bold; } tr.completed { background-color: #f0fdf4 !important; } tr:nth-child(even) { background-color: #fafafa; } @media print { body { padding: 10px; } button { display: none !important; } }</style></head><body><h1>${titleText}</h1><p class="meta">${subTitleText} • Run at ${new Date().toLocaleDateString()}</p>${tableHtml}<script>window.onload = function() { window.print(); };<\/script></body></html>`);
+          printWindow.document.close();
+        }
+      };
+    }
+  </script>
+<script>
+  function exportTeacherLoads(type) {
+    const table = document.getElementById('calculationTable');
+    if(!table) return;
+    
+    // NATIVE TRUE .XLSX GENERATION
+    if (type === 'xlsx') {
+      const filename = `Teacher_Loads_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const wb = XLSX.utils.table_to_book(table, {sheet: "TeacherLoads"});
+      
+      // Force Excel sheet to be Right-To-Left (RTL)
+      if(wb.Sheets["TeacherLoads"]) {
+        wb.Sheets["TeacherLoads"]['!rightToLeft'] = true;
+      }
+      
+      XLSX.writeFile(wb, filename);
+      return;
+    }
+
+    // WORD .DOC GENERATION (LANDSCAPE + CUSTOM COLUMN WIDTHS)
+    const filename = `Teacher_Loads_${new Date().toISOString().split('T')[0]}.doc`;
+    
+    // Use mso-specific CSS classes to force landscape in Word, and wrapper div
+    const preHtml = `
+      <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+      <head>
+        <meta charset='utf-8'>
+        <style>
+          @page Section1 { size: 29.7cm 21cm; mso-page-orientation: landscape; margin: 1cm; }
+          div.Section1 { page: Section1; }
+          table { width: 100%; border-collapse: collapse; direction: rtl; font-family: Tahoma, Arial, sans-serif; text-align: right; font-size: 11px; table-layout: fixed; }
+          th, td { border: 1px solid black; padding: 5px; word-wrap: break-word; }
+          th { background-color: #e2e8f0; font-weight: bold; }
+        </style>
+      </head>
+      <body>
+        <div class="Section1">
+    `;
+    
+    // This <colgroup> dictates the precise column widths so numbers get narrow columns and names get wide columns
+    const colGroup = `
+      <colgroup>
+        <col style="width: 4%"> <col style="width: 14%"> <col style="width: 9%"> <col style="width: 5%"> <col style="width: 4%"> <col style="width: 9%"> <col style="width: 17%"> <col style="width: 11%"> <col style="width: 5%"> <col style="width: 5%"> <col style="width: 6%"> <col style="width: 6%"> <col style="width: 5%"> 
+      </colgroup>
+    `;
+
+    // Safer injection: append <colgroup> directly after the <table ... > opening tag to prevent HTML breakage
+    const tableHtml = table.outerHTML.replace(/(<table[^>]*>)/i, '$1' + colGroup);
+    const htmlContent = preHtml + tableHtml + "</div></body></html>";
+    
+    const blob = new Blob(['\ufeff', htmlContent], { type: 'application/msword' });
+    const downloadLink = document.createElement("a");
+    downloadLink.href = URL.createObjectURL(blob);
+    downloadLink.download = filename;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+  }
+</script>
+</body>
+</html>
